@@ -1213,7 +1213,7 @@ open class ZLCustomCamera: UIViewController {
             connection?.videoOrientation = cacheVideoOrientation
         }
         
-        if let connection = connection, connection.isVideoStabilizationSupported {
+        if let connection = connection, connection.isVideoStabilizationSupported, videoInput?.device.position == .back {
             connection.preferredVideoStabilizationMode = cameraConfig.videoStabilizationMode
         }
         
