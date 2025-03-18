@@ -27,6 +27,7 @@
 import UIKit
 import AVFoundation
 import CoreMotion
+import MediaPlayer
 
 open class ZLCustomCamera: UIViewController {
     public enum Layout {
@@ -283,6 +284,10 @@ open class ZLCustomCamera: UIViewController {
 
     private var isUsingDefaultZoomFactor = true
 
+    private var initialVolume: Float = 0.0
+    private var volumeObserverAdded = false
+    private var volumeObservationContext = 0
+
     // 仅支持竖屏
     override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         deviceIsiPhone() ? .portrait : .all
@@ -297,6 +302,9 @@ open class ZLCustomCamera: UIViewController {
         cleanAutoStopTimer()
         cleanTimer()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if volumeObserverAdded {
+            AVAudioSession.sharedInstance().removeObserver(self, forKeyPath: "outputVolume", context: &volumeObservationContext)
+        }
     }
     
     @objc public init() {
@@ -358,6 +366,13 @@ open class ZLCustomCamera: UIViewController {
     
     override open func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if !volumeObserverAdded {
+            let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 0, height: 0))
+            view.addSubview(volumeView)
+            initialVolume = AVAudioSession.sharedInstance().outputVolume
+            AVAudioSession.sharedInstance().addObserver(self, forKeyPath: "outputVolume", options: [.new], context: &volumeObservationContext)
+            volumeObserverAdded = true
+        }
         observerDeviceMotion()
     }
     
@@ -1443,6 +1458,28 @@ open class ZLCustomCamera: UIViewController {
             device.unlockForConfiguration()
         } catch {
             zl_debugPrint("Failed to toggle zoom factor: \(error.localizedDescription)")
+        }
+    }
+
+    override open func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                                    change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        if context == &volumeObservationContext {
+            if let newVolume = change?[.newKey] as? Float {
+                    DispatchQueue.main.async {
+                        if self.cameraConfig.allowTakePhoto {
+                            self.takePicture()
+                        } else if self.cameraConfig.allowRecordVideo {
+                            if self.movieFileOutput?.isRecording == true {
+                                self.finishRecord()
+                            } else {
+                                self.startRecord(shouldScheduleStop: true)
+                            }
+                        }
+                        self.initialVolume = newVolume
+                    }
+            }
+        } else {
+            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
         }
     }
 }
