@@ -1291,7 +1291,7 @@ open class ZLCustomCamera: UIViewController {
         flashBtn.isHidden = true
         
         let connection = movieFileOutput.connection(with: .video)
-        connection?.videoScaleAndCropFactor = 1
+        // connection?.videoScaleAndCropFactor = 1
         if !restartRecordAfterSwitchCamera {
             let setOrientation = cameraConfig.lockedOutputOrientation ?? orientation
             connection?.videoOrientation = setOrientation
@@ -1579,7 +1579,7 @@ extension ZLCustomCamera: AVCaptureFileOutputRecordingDelegate {
             let duration = self.recordDurations.reduce(0, +)
             
             // 重置焦距
-            self.setVideoZoomFactor(self.isWideCameraEnabled() ? (self.videoInput?.device.defaultZoomFactor ?? 1) : 1)
+            // self.setVideoZoomFactor(self.isWideCameraEnabled() ? (self.videoInput?.device.defaultZoomFactor ?? 1) : 1)
             if duration < Double(self.cameraConfig.minRecordDuration) {
                 showAlertView(String(format: localLanguageTextValue(.minRecordTimeTips), self.cameraConfig.minRecordDuration), self)
                 self.recordURLs.forEach { try? FileManager.default.removeItem(at: $0) }
