@@ -27,6 +27,7 @@
 import UIKit
 import AVFoundation
 import CoreMotion
+import MediaPlayer
 
 open class ZLCustomCamera: UIViewController {
     public enum Layout {
@@ -39,6 +40,8 @@ open class ZLCustomCamera: UIViewController {
         static let animateLayerWidth: CGFloat = 5
         static let cameraBtnNormalColor: UIColor = .white
         static let cameraBtnRecodingBorderColor: UIColor = .white.withAlphaComponent(0.8)
+        static let zoomToggleBtnSize: CGFloat = 40
+        static let zoomToggleBtnMargin: CGFloat = 20
     }
     
     @objc public var takeDoneBlock: ((UIImage?, URL?) -> Void)?
@@ -175,7 +178,26 @@ open class ZLCustomCamera: UIViewController {
         view.contentMode = .scaleAspectFit
         return view
     }()
-    
+
+    public lazy var zoomToggleBtn: ZLEnlargeButton = {
+        let btn = ZLEnlargeButton(type: .custom)
+        if #available(iOS 13.0, *) {
+            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+            btn.setImage(UIImage(systemName: "plus.magnifyingglass", withConfiguration: config), for: .normal)
+            btn.setImage(UIImage(systemName: "minus.magnifyingglass", withConfiguration: config), for: .selected)
+        }
+        btn.addTarget(self, action: #selector(zoomToggleBtnClick), for: .touchUpInside)
+        btn.backgroundColor = UIColor.black.withAlphaComponent(0.8)
+        btn.layer.cornerRadius = ZLCustomCamera.Layout.zoomToggleBtnSize / 2
+        btn.layer.masksToBounds = true
+        btn.isHidden = true
+        btn.isSelected = true
+        btn.tintColor = .white
+        btn.adjustsImageWhenHighlighted = false
+        btn.enlargeInset = 10
+        return btn
+    }()
+
     private var hideTipsTimer: Timer?
     
     private var takedImage: UIImage?
@@ -259,7 +281,13 @@ open class ZLCustomCamera: UIViewController {
     private var canEditImage: Bool {
         ZLPhotoConfiguration.default().allowEditImage
     }
-    
+
+    private var isUsingDefaultZoomFactor = true
+
+    private var initialVolume: Float = 0.0
+    private var volumeObserverAdded = false
+    private var volumeObservationContext = 0
+
     // 仅支持竖屏
     override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         deviceIsiPhone() ? .portrait : .all
@@ -274,6 +302,9 @@ open class ZLCustomCamera: UIViewController {
         cleanAutoStopTimer()
         cleanTimer()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
+        if volumeObserverAdded {
+            AVAudioSession.sharedInstance().removeObserver(self, forKeyPath: "outputVolume", context: &volumeObservationContext)
+        }
     }
     
     @objc public init() {
@@ -335,6 +366,13 @@ open class ZLCustomCamera: UIViewController {
     
     override open func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        if !volumeObserverAdded {
+            let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 0, height: 0))
+            view.addSubview(volumeView)
+            initialVolume = AVAudioSession.sharedInstance().outputVolume
+            AVAudioSession.sharedInstance().addObserver(self, forKeyPath: "outputVolume", options: [.new], context: &volumeObservationContext)
+            volumeObserverAdded = true
+        }
         observerDeviceMotion()
     }
     
@@ -436,6 +474,16 @@ open class ZLCustomCamera: UIViewController {
             .width + 20
         let doneBtnY = view.bounds.height - 57 - insets.bottom
         doneBtn.frame = CGRect(x: view.bounds.width - doneBtnW - 20, y: doneBtnY, width: doneBtnW, height: ZLLayout.bottomToolBtnH)
+
+        // Add zoomToggleBtn layout
+        let zoomBtnSize = ZLCustomCamera.Layout.zoomToggleBtnSize
+        let zoomBtnY = bottomView.frame.minY - zoomBtnSize - ZLCustomCamera.Layout.zoomToggleBtnMargin - 20
+        zoomToggleBtn.frame = CGRect(
+            x: (view.bounds.width - zoomBtnSize) / 2,
+            y: zoomBtnY,
+            width: zoomBtnSize,
+            height: zoomBtnSize
+        )
     }
     
     private func setupUI() {
@@ -446,6 +494,7 @@ open class ZLCustomCamera: UIViewController {
         view.addSubview(focusCursorView)
         view.addSubview(tipsLabel)
         view.addSubview(bottomView)
+        view.addSubview(zoomToggleBtn)
         
         if let overlayView = cameraConfig.overlayView {
             view.addSubview(overlayView)  // Add custom overlay view.
@@ -604,6 +653,15 @@ open class ZLCustomCamera: UIViewController {
             try device.lockForConfiguration()
             device.videoZoomFactor = device.defaultZoomFactor
             device.unlockForConfiguration()
+            isUsingDefaultZoomFactor = true
+
+            // Show zoom toggle button if it's available
+            if #available(iOS 11.0, *), device.minAvailableVideoZoomFactor < device.defaultZoomFactor {
+                ZLMainAsync {
+                    self.zoomToggleBtn.isHidden = false
+                    self.zoomToggleBtn.isSelected = true
+                }
+            }
         } catch {
             zl_debugPrint("Failed to set initial zoom factor: \(error.localizedDescription)")
         }
@@ -1233,7 +1291,7 @@ open class ZLCustomCamera: UIViewController {
         flashBtn.isHidden = true
         
         let connection = movieFileOutput.connection(with: .video)
-        connection?.videoScaleAndCropFactor = 1
+        // connection?.videoScaleAndCropFactor = 1
         if !restartRecordAfterSwitchCamera {
             let setOrientation = cameraConfig.lockedOutputOrientation ?? orientation
             connection?.videoOrientation = setOrientation
@@ -1340,10 +1398,21 @@ open class ZLCustomCamera: UIViewController {
                 self.doneBtn.isHidden = true
                 self.takedImageView.isHidden = true
                 self.takedImage = nil
+
+                // Show zoom toggle button if conditions are met
+                if #available(iOS 11.0, *),
+                   self.isWideCameraEnabled(),
+                   let device = self.videoInput?.device,
+                   device.minAvailableVideoZoomFactor < device.defaultZoomFactor {
+                    self.zoomToggleBtn.isHidden = false
+                    // Set button state based on current zoom level
+                    self.zoomToggleBtn.isSelected = abs(device.videoZoomFactor - device.defaultZoomFactor) < 0.1
+                }
             } else {
                 self.hideTipsLabel()
                 self.bottomView.isHidden = true
                 self.dismissBtn.isHidden = true
+                self.zoomToggleBtn.isHidden = true
                 if self.takedImage != nil {
                     self.retakeBtn.isHidden = self.canEditImage
                     self.doneBtn.isHidden = self.canEditImage
@@ -1367,6 +1436,51 @@ open class ZLCustomCamera: UIViewController {
     @objc private func recordVideoPlayFinished() {
         recordVideoPlayerLayer?.player?.seek(to: .zero)
         recordVideoPlayerLayer?.player?.play()
+    }
+
+    @objc private func zoomToggleBtnClick() {
+        guard let device = videoInput?.device else { return }
+        guard #available(iOS 11.0, *), isWideCameraEnabled() else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // If current zoom is approximately defaultZoomFactor, go to minimum zoom
+            if abs(device.videoZoomFactor - device.defaultZoomFactor) < 0.1 {
+                device.videoZoomFactor = device.minAvailableVideoZoomFactor
+                zoomToggleBtn.isSelected = false
+            } else {
+                // Otherwise reset to defaultZoomFactor
+                device.videoZoomFactor = device.defaultZoomFactor
+                zoomToggleBtn.isSelected = true
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            zl_debugPrint("Failed to toggle zoom factor: \(error.localizedDescription)")
+        }
+    }
+
+    override open func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                                    change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
+        if context == &volumeObservationContext {
+            if let newVolume = change?[.newKey] as? Float {
+                    DispatchQueue.main.async {
+                        if self.cameraConfig.allowTakePhoto {
+                            self.takePicture()
+                        } else if self.cameraConfig.allowRecordVideo {
+                            if self.movieFileOutput?.isRecording == true {
+                                self.finishRecord()
+                            } else {
+                                self.startRecord(shouldScheduleStop: true)
+                            }
+                        }
+                        self.initialVolume = newVolume
+                    }
+            }
+        } else {
+            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
+        }
     }
 }
 
@@ -1465,7 +1579,7 @@ extension ZLCustomCamera: AVCaptureFileOutputRecordingDelegate {
             let duration = self.recordDurations.reduce(0, +)
             
             // 重置焦距
-            self.setVideoZoomFactor(self.isWideCameraEnabled() ? (self.videoInput?.device.defaultZoomFactor ?? 1) : 1)
+            // self.setVideoZoomFactor(self.isWideCameraEnabled() ? (self.videoInput?.device.defaultZoomFactor ?? 1) : 1)
             if duration < Double(self.cameraConfig.minRecordDuration) {
                 showAlertView(String(format: localLanguageTextValue(.minRecordTimeTips), self.cameraConfig.minRecordDuration), self)
                 self.recordURLs.forEach { try? FileManager.default.removeItem(at: $0) }
