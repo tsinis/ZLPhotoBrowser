@@ -39,6 +39,8 @@ open class ZLCustomCamera: UIViewController {
         static let animateLayerWidth: CGFloat = 5
         static let cameraBtnNormalColor: UIColor = .white
         static let cameraBtnRecodingBorderColor: UIColor = .white.withAlphaComponent(0.8)
+        static let zoomToggleBtnSize: CGFloat = 40
+        static let zoomToggleBtnMargin: CGFloat = 20
     }
     
     @objc public var takeDoneBlock: ((UIImage?, URL?) -> Void)?
@@ -175,7 +177,26 @@ open class ZLCustomCamera: UIViewController {
         view.contentMode = .scaleAspectFit
         return view
     }()
-    
+
+    public lazy var zoomToggleBtn: ZLEnlargeButton = {
+        let btn = ZLEnlargeButton(type: .custom)
+        if #available(iOS 13.0, *) {
+            let config = UIImage.SymbolConfiguration(pointSize: 15, weight: .semibold)
+            btn.setImage(UIImage(systemName: "plus.magnifyingglass", withConfiguration: config), for: .normal)
+            btn.setImage(UIImage(systemName: "minus.magnifyingglass", withConfiguration: config), for: .selected)
+        }
+        btn.addTarget(self, action: #selector(zoomToggleBtnClick), for: .touchUpInside)
+        btn.backgroundColor = UIColor.black.withAlphaComponent(0.8)
+        btn.layer.cornerRadius = ZLCustomCamera.Layout.zoomToggleBtnSize / 2
+        btn.layer.masksToBounds = true
+        btn.isHidden = true
+        btn.isSelected = true
+        btn.tintColor = .white
+        btn.adjustsImageWhenHighlighted = false
+        btn.enlargeInset = 10
+        return btn
+    }()
+
     private var hideTipsTimer: Timer?
     
     private var takedImage: UIImage?
@@ -259,7 +280,9 @@ open class ZLCustomCamera: UIViewController {
     private var canEditImage: Bool {
         ZLPhotoConfiguration.default().allowEditImage
     }
-    
+
+    private var isUsingDefaultZoomFactor = true
+
     // 仅支持竖屏
     override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
         deviceIsiPhone() ? .portrait : .all
@@ -436,6 +459,16 @@ open class ZLCustomCamera: UIViewController {
             .width + 20
         let doneBtnY = view.bounds.height - 57 - insets.bottom
         doneBtn.frame = CGRect(x: view.bounds.width - doneBtnW - 20, y: doneBtnY, width: doneBtnW, height: ZLLayout.bottomToolBtnH)
+
+        // Add zoomToggleBtn layout
+        let zoomBtnSize = ZLCustomCamera.Layout.zoomToggleBtnSize
+        let zoomBtnY = bottomView.frame.minY - zoomBtnSize - ZLCustomCamera.Layout.zoomToggleBtnMargin - 20
+        zoomToggleBtn.frame = CGRect(
+            x: (view.bounds.width - zoomBtnSize) / 2,
+            y: zoomBtnY,
+            width: zoomBtnSize,
+            height: zoomBtnSize
+        )
     }
     
     private func setupUI() {
@@ -446,6 +479,7 @@ open class ZLCustomCamera: UIViewController {
         view.addSubview(focusCursorView)
         view.addSubview(tipsLabel)
         view.addSubview(bottomView)
+        view.addSubview(zoomToggleBtn)
         
         if let overlayView = cameraConfig.overlayView {
             view.addSubview(overlayView)  // Add custom overlay view.
@@ -604,6 +638,15 @@ open class ZLCustomCamera: UIViewController {
             try device.lockForConfiguration()
             device.videoZoomFactor = device.defaultZoomFactor
             device.unlockForConfiguration()
+            isUsingDefaultZoomFactor = true
+
+            // Show zoom toggle button if it's available
+            if #available(iOS 11.0, *), device.minAvailableVideoZoomFactor < device.defaultZoomFactor {
+                ZLMainAsync {
+                    self.zoomToggleBtn.isHidden = false
+                    self.zoomToggleBtn.isSelected = true
+                }
+            }
         } catch {
             zl_debugPrint("Failed to set initial zoom factor: \(error.localizedDescription)")
         }
@@ -1340,10 +1383,21 @@ open class ZLCustomCamera: UIViewController {
                 self.doneBtn.isHidden = true
                 self.takedImageView.isHidden = true
                 self.takedImage = nil
+
+                // Show zoom toggle button if conditions are met
+                if #available(iOS 11.0, *),
+                   self.isWideCameraEnabled(),
+                   let device = self.videoInput?.device,
+                   device.minAvailableVideoZoomFactor < device.defaultZoomFactor {
+                    self.zoomToggleBtn.isHidden = false
+                    // Set button state based on current zoom level
+                    self.zoomToggleBtn.isSelected = abs(device.videoZoomFactor - device.defaultZoomFactor) < 0.1
+                }
             } else {
                 self.hideTipsLabel()
                 self.bottomView.isHidden = true
                 self.dismissBtn.isHidden = true
+                self.zoomToggleBtn.isHidden = true
                 if self.takedImage != nil {
                     self.retakeBtn.isHidden = self.canEditImage
                     self.doneBtn.isHidden = self.canEditImage
@@ -1367,6 +1421,29 @@ open class ZLCustomCamera: UIViewController {
     @objc private func recordVideoPlayFinished() {
         recordVideoPlayerLayer?.player?.seek(to: .zero)
         recordVideoPlayerLayer?.player?.play()
+    }
+
+    @objc private func zoomToggleBtnClick() {
+        guard let device = videoInput?.device else { return }
+        guard #available(iOS 11.0, *), isWideCameraEnabled() else { return }
+        
+        do {
+            try device.lockForConfiguration()
+            
+            // If current zoom is approximately defaultZoomFactor, go to minimum zoom
+            if abs(device.videoZoomFactor - device.defaultZoomFactor) < 0.1 {
+                device.videoZoomFactor = device.minAvailableVideoZoomFactor
+                zoomToggleBtn.isSelected = false
+            } else {
+                // Otherwise reset to defaultZoomFactor
+                device.videoZoomFactor = device.defaultZoomFactor
+                zoomToggleBtn.isSelected = true
+            }
+            
+            device.unlockForConfiguration()
+        } catch {
+            zl_debugPrint("Failed to toggle zoom factor: \(error.localizedDescription)")
+        }
     }
 }
 
