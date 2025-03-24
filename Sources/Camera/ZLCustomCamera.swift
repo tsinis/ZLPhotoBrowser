@@ -370,8 +370,19 @@ open class ZLCustomCamera: UIViewController {
             let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 0, height: 0))
             view.addSubview(volumeView)
             initialVolume = AVAudioSession.sharedInstance().outputVolume
-            AVAudioSession.sharedInstance().addObserver(self, forKeyPath: "outputVolume", options: [.new], context: &volumeObservationContext)
-            volumeObserverAdded = true
+            
+            // Delay adding the volume observer to prevent false triggers
+            // when the camera view first appears
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                guard let self = self, !self.volumeObserverAdded else { return }
+                AVAudioSession.sharedInstance().addObserver(
+                    self,
+                    forKeyPath: "outputVolume",
+                    options: [.new],
+                    context: &self.volumeObservationContext
+                )
+                self.volumeObserverAdded = true
+            }
         }
         observerDeviceMotion()
     }
