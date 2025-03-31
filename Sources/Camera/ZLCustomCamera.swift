@@ -667,7 +667,7 @@ open class ZLCustomCamera: UIViewController {
             isUsingDefaultZoomFactor = true
 
             // Show zoom toggle button if it's available
-            if #available(iOS 11.0, *), device.minAvailableVideoZoomFactor < device.defaultZoomFactor {
+            if #available(iOS 11.0, *), device.minAvailableVideoZoomFactor < device.zl.defaultZoomFactor {
                 ZLMainAsync {
                     self.zoomToggleBtn.isHidden = false
                     self.zoomToggleBtn.isSelected = true
@@ -1414,10 +1414,10 @@ open class ZLCustomCamera: UIViewController {
                 if #available(iOS 11.0, *),
                    self.isWideCameraEnabled(),
                    let device = self.videoInput?.device,
-                   device.minAvailableVideoZoomFactor < device.defaultZoomFactor {
+                   device.minAvailableVideoZoomFactor < device.zl.defaultZoomFactor {
                     self.zoomToggleBtn.isHidden = false
                     // Set button state based on current zoom level
-                    self.zoomToggleBtn.isSelected = abs(device.videoZoomFactor - device.defaultZoomFactor) < 0.1
+                    self.zoomToggleBtn.isSelected = abs(device.videoZoomFactor - device.zl.defaultZoomFactor) < 0.1
                 }
             } else {
                 self.hideTipsLabel()
@@ -1457,12 +1457,12 @@ open class ZLCustomCamera: UIViewController {
             try device.lockForConfiguration()
 
             // If current zoom is approximately defaultZoomFactor, go to minimum zoom
-            if abs(device.videoZoomFactor - device.defaultZoomFactor) < 0.1 {
+            if abs(device.videoZoomFactor - device.zl.defaultZoomFactor) < 0.1 {
                 device.videoZoomFactor = device.minAvailableVideoZoomFactor
                 zoomToggleBtn.isSelected = false
             } else {
                 // Otherwise reset to defaultZoomFactor
-                device.videoZoomFactor = device.defaultZoomFactor
+                device.videoZoomFactor = device.zl.defaultZoomFactor
                 zoomToggleBtn.isSelected = true
             }
 
