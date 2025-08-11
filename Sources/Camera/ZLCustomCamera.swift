@@ -927,6 +927,14 @@ open class ZLCustomCamera: UIViewController {
 
     @objc private func retakeBtnClick() {
         sessionQueue.async {
+            // Re-apply preset and initial zoom so minAvailableVideoZoomFactor (<1x) is restored after recording.
+            if let device = self.videoInput?.device {
+                self.session.beginConfiguration()
+                self.refreshSessionPreset(device: device)
+                self.session.commitConfiguration()
+                self.setInitialZoomFactor(for: device)
+            }
+
             self.session.startRunning()
             self.resetSubViewStatus()
         }
