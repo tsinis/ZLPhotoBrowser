@@ -40,6 +40,7 @@ ZLPhotoBrowser是一款微信样式的图片选择器，支持预览/相册内�
 - [x] 支持SwiftUI
 - [x] 支持横竖屏
 - [x] 自选框架样式
+- [x] 支持分页加载
 - [x] 预览快速选择（支持拖拽选择，效果参照QQ）
 - [x] 相册内部选择（支持滑动选择）
 - [x] 图片/Gif/LivePhoto/Video 混合选择
@@ -63,25 +64,25 @@ ZLPhotoBrowser是一款微信样式的图片选择器，支持预览/相册内�
 ### 框架支持
  * iOS 10.0
  * Swift 5.x
- * Xcode 12.x
+ * Xcode 14.x
  
 ### 使用示例
  - 快速选择
  ```
- let ps = ZLPhotoPreviewSheet()
- ps.selectImageBlock = { [weak self] results, isOriginal in
+ let picker = ZLPhotoPicker()
+ picker.selectImageBlock = { [weak self] results, isOriginal in
      // your code
  }
- ps.showPreview(animate: true, sender: self)
+ picker.showPreview(animate: true, sender: self)
  ```
  
  - 直接进入相册选择
  ```
- let ps = ZLPhotoPreviewSheet()
- ps.selectImageBlock = { [weak self] results, isOriginal in
+ let picker = ZLPhotoPreviewSheet()
+ picker.selectImageBlock = { [weak self] results, isOriginal in
      // your code
  }
- ps.showPhotoLibrary(sender: self)
+ picker.showPhotoLibrary(sender: self)
  ```
  
  - 需要注意的地方，你需要在你app的 `Info.plist` 中添加如下键值对
@@ -103,6 +104,14 @@ ZLPhotoBrowser是一款微信样式的图片选择器，支持预览/相册内�
 ### 更新日志
 > [更多更新日志](https://github.com/longitachi/ZLPhotoBrowser/blob/master/CHANGELOG.md)
 ```
+● 4.7.0.1
+  Add:
+    支持分页加载。
+    小图界面支持边缘侧滑返回。
+    提供一个block，外界可以通过该block去控制是否允许进入相机。
+    替换一些过期的API。
+    ZLImagePreviewController中更多的类型支持长按手势，并允许给网络视频设置封面图。
+    ZLImagePreviewController界面支持禁止下拉返回手势。
 ● 4.6.0.1
   Add:
     支持SwiftUI。
@@ -123,13 +132,6 @@ ZLPhotoBrowser是一款微信样式的图片选择器，支持预览/相册内�
     修复图片编辑器界面内存泄漏的问题。
     无相册权限时，再次点击相册不再显示引导开启权限弹窗（苹果审核政策要求）。
     修复图片裁剪后，涂鸦橡皮擦工具在涂抹时，UI显示错位的bug。
-● 4.5.7
-  Add:
-    自定义相机支持点击后保持录像模式。
-    自定义相机在iOS13以上系统支持广角摄像头。
-    自定义相机支持添加自定义遮罩层。
-    视频编辑控制器添加取消编辑的回调block。
-    新增ZLImagePreviewControllerDelegate协议，接收ZLImagePreviewController中的事件回调。
 ...
 ```
 
@@ -152,7 +154,7 @@ ZLPhotoBrowser是一款微信样式的图片选择器，支持预览/相册内�
   > 如果执行时遇到`Building universal frameworks with common architectures is not possible. The device and simulator slices for "ZLPhotoBrowser" both build for: arm64
   Rebuild with --use-xcframeworks to create an xcframework bundle instead.`这个错误，点击[这里](https://github.com/Carthage/Carthage/blob/master/Documentation/Xcode12Workaround.md)
   
-* Swift Package Manager (该方式集成暂时有问题，图片及多语言资源无法读取，请暂时先用其他方式)
+* Swift Package Manager
   * 1. 选择 File > Swift Packages > Add Package Dependency，输入 `https://github.com/longitachi/ZLPhotoBrowser.git`
   * 2. 输入对应版本号（SPM 最低版本为 `4.0.9`）
   * 3. 等Xcode下载完成后确定即可
