@@ -397,11 +397,6 @@ open class ZLCustomCamera: UIViewController {
             #else
                 showAlertAndDismissAfterDoneAction(message: "Error configuration of camera", type: nil)
             #endif
-        } else if cameraConfigureFinish, viewDidAppearCount == 0 {
-            showTipsLabel(message: cameraUsageTipsText())
-            let animation = ZLAnimationUtils.animation(type: .fade, fromValue: 0, toValue: 1, duration: 0.15)
-            previewLayer?.add(animation, forKey: nil)
-            setFocusCusor(point: view.center)
         }
         viewDidAppearCount += 1
     }
@@ -655,6 +650,13 @@ open class ZLCustomCamera: UIViewController {
 
             self.setInitialZoomFactor(for: camera)
             self.session.startRunning()
+
+            ZLMainAsync {
+                self.showTipsLabel(message: self.cameraUsageTipsText())
+                let animation = ZLAnimationUtils.animation(type: .fade, fromValue: 0, toValue: 1, duration: 0.15)
+                self.previewLayer?.add(animation, forKey: nil)
+                self.setFocusCusor(point: self.view.center)
+            }
         }
     }
 
