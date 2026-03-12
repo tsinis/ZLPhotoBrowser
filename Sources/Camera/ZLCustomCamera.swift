@@ -611,48 +611,48 @@ open class ZLCustomCamera: UIViewController {
         guard let camera = getCamera(position: cameraConfig.devicePosition.avDevicePosition) else { return }
         guard let input = try? AVCaptureDeviceInput(device: camera) else { return }
 
-        session.beginConfiguration()
-
-        // 相机画面输入流
-        videoInput = input
-
-        refreshSessionPreset(device: camera)
-
-        let movieFileOutput = AVCaptureMovieFileOutput()
-        // 解决视频录制超过10s没有声音的bug
-        movieFileOutput.movieFragmentInterval = .invalid
-        self.movieFileOutput = movieFileOutput
-
-        // 添加视频输入
-        if let videoInput = videoInput, session.canAddInput(videoInput) {
-            session.addInput(videoInput)
-        }
-        // 添加音频输入
-        addAudioInput()
-
-        // 照片输出流
-        let imageOutput = AVCapturePhotoOutput()
-        self.imageOutput = imageOutput
-        // 将输出流添加到session
-        if session.canAddOutput(imageOutput) {
-            session.addOutput(imageOutput)
-        }
-        if session.canAddOutput(movieFileOutput) {
-            session.addOutput(movieFileOutput)
-        }
-
-        // imageOutPut添加到session之后才能判断supportedFlashModes
-        if !cameraConfig.showFlashSwitch || torchDevice?.hasFlash == false {
-            ZLMainAsync {
-                self.showFlashBtn = false
-            }
-        }
-
-        session.commitConfiguration()
-
-        cameraConfigureFinish = true
-
         sessionQueue.async {
+            self.session.beginConfiguration()
+
+            // 相机画面输入流
+            self.videoInput = input
+
+            self.refreshSessionPreset(device: camera)
+
+            let movieFileOutput = AVCaptureMovieFileOutput()
+            // 解决视频录制超过10s没有声音的bug
+            movieFileOutput.movieFragmentInterval = .invalid
+            self.movieFileOutput = movieFileOutput
+
+            // 添加视频输入
+            if let videoInput = self.videoInput, self.session.canAddInput(videoInput) {
+                self.session.addInput(videoInput)
+            }
+            // 添加音频输入
+            self.addAudioInput()
+
+            // 照片输出流
+            let imageOutput = AVCapturePhotoOutput()
+            self.imageOutput = imageOutput
+            // 将输出流添加到session
+            if self.session.canAddOutput(imageOutput) {
+                self.session.addOutput(imageOutput)
+            }
+            if self.session.canAddOutput(movieFileOutput) {
+                self.session.addOutput(movieFileOutput)
+            }
+
+            // imageOutPut添加到session之后才能判断supportedFlashModes
+            if !cameraConfig.showFlashSwitch || self.torchDevice?.hasFlash == false {
+                ZLMainAsync {
+                    self.showFlashBtn = false
+                }
+            }
+
+            self.session.commitConfiguration()
+
+            self.cameraConfigureFinish = true
+
             self.setInitialZoomFactor(for: camera)
             self.session.startRunning()
         }
