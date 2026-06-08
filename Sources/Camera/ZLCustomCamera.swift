@@ -26,8 +26,8 @@
 
 import UIKit
 import AVFoundation
+import AVKit
 import CoreMotion
-import MediaPlayer
 
 open class ZLCustomCamera: UIViewController {
     public enum Layout {
@@ -284,9 +284,10 @@ open class ZLCustomCamera: UIViewController {
 
     private var isUsingDefaultZoomFactor = true
 
-    private var initialVolume: Float = 0.0
-    private var volumeObserverAdded = false
-    private var volumeObservationContext = 0
+    /// Handles capture triggered by hardware buttons (Camera Control, Action button,
+    /// volume buttons) on iOS 17.2+. Stored as `Any?` because the type is only available
+    /// on iOS 17.2+ and stored properties can't carry `@available` annotations.
+    private var captureEventInteraction: Any?
 
     // 仅支持竖屏
     override public var supportedInterfaceOrientations: UIInterfaceOrientationMask {
@@ -302,9 +303,6 @@ open class ZLCustomCamera: UIViewController {
         cleanAutoStopTimer()
         cleanTimer()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-        if volumeObserverAdded {
-            AVAudioSession.sharedInstance().removeObserver(self, forKeyPath: "outputVolume", context: &volumeObservationContext)
-        }
     }
 
     @objc public init() {
@@ -321,6 +319,7 @@ open class ZLCustomCamera: UIViewController {
         super.viewDidLoad()
 
         setupUI()
+        setupCaptureEventInteraction()
         if !UIImagePickerController.isSourceTypeAvailable(.camera) {
             return
         }
@@ -366,24 +365,6 @@ open class ZLCustomCamera: UIViewController {
 
     override open func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        if !volumeObserverAdded {
-            let volumeView = MPVolumeView(frame: CGRect(x: -1000, y: -1000, width: 0, height: 0))
-            view.addSubview(volumeView)
-            initialVolume = AVAudioSession.sharedInstance().outputVolume
-
-            // Delay adding the volume observer to prevent false triggers
-            // when the camera view first appears
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                guard let self = self, !self.volumeObserverAdded else { return }
-                AVAudioSession.sharedInstance().addObserver(
-                    self,
-                    forKeyPath: "outputVolume",
-                    options: [.new],
-                    context: &self.volumeObservationContext
-                )
-                self.volumeObserverAdded = true
-            }
-        }
         observerDeviceMotion()
     }
 
@@ -656,6 +637,7 @@ open class ZLCustomCamera: UIViewController {
                 let animation = ZLAnimationUtils.animation(type: .fade, fromValue: 0, toValue: 1, duration: 0.15)
                 self.previewLayer?.add(animation, forKey: nil)
                 self.setFocusCusor(point: self.view.center)
+                self.setCaptureEventInteractionEnabled(true)
             }
         }
     }
@@ -1409,6 +1391,10 @@ open class ZLCustomCamera: UIViewController {
 
     private func resetSubViewStatus() {
         ZLMainAsync {
+            // Hardware capture buttons should only act on the live preview, not while
+            // reviewing a captured photo/video (when the session is stopped).
+            self.setCaptureEventInteractionEnabled(self.session.isRunning)
+
             if self.session.isRunning {
                 self.showTipsLabel(message: self.cameraUsageTipsText())
                 self.bottomView.isHidden = false
@@ -1481,25 +1467,50 @@ open class ZLCustomCamera: UIViewController {
         }
     }
 
-    override open func observeValue(forKeyPath keyPath: String?, of object: Any?,
-                                    change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        if context == &volumeObservationContext {
-            if let newVolume = change?[.newKey] as? Float {
-                    DispatchQueue.main.async {
-                        if self.cameraConfig.allowTakePhoto {
-                            self.takePicture()
-                        } else if self.cameraConfig.allowRecordVideo {
-                            if self.movieFileOutput?.isRecording == true {
-                                self.finishRecord()
-                            } else {
-                                self.startRecord(shouldScheduleStop: true)
-                            }
-                        }
-                        self.initialVolume = newVolume
-                    }
+    /// Registers an `AVCaptureEventInteraction` so hardware capture buttons (the dedicated
+    /// Camera Control / capture button on newer iPhones, the Action button, and the volume
+    /// buttons on older devices) trigger photo capture or video recording. iOS 17.2+ only;
+    /// on earlier systems hardware buttons simply have no effect.
+    private func setupCaptureEventInteraction() {
+        guard #available(iOS 17.2, *) else { return }
+
+        let interaction = AVCaptureEventInteraction { [weak self] event in
+            // The system delivers `.began` / `.ended` / `.cancelled` phases for a single press.
+            // Trigger on `.ended` so one button press maps to exactly one capture action,
+            // matching a tap on the on-screen shutter.
+            guard event.phase == .ended else { return }
+            self?.handleHardwareCaptureEvent()
+        }
+        // Stays disabled until the capture session is actually running so button presses
+        // never fire while reviewing a shot or before the camera is ready.
+        interaction.isEnabled = false
+        view.addInteraction(interaction)
+        captureEventInteraction = interaction
+    }
+
+    /// Enables or disables hardware-button capture. Driven by the capture session's running
+    /// state: active while the live preview is shown, off while reviewing a photo/video.
+    private func setCaptureEventInteractionEnabled(_ enabled: Bool) {
+        guard #available(iOS 17.2, *),
+              let interaction = captureEventInteraction as? AVCaptureEventInteraction else {
+            return
+        }
+        interaction.isEnabled = enabled
+    }
+
+    /// Performs the capture action for a hardware-button press, mirroring the on-screen
+    /// shutter: take a photo, or toggle video recording (with auto-stop at max duration).
+    private func handleHardwareCaptureEvent() {
+        ZLMainAsync {
+            if self.cameraConfig.allowTakePhoto {
+                self.takePicture()
+            } else if self.cameraConfig.allowRecordVideo {
+                if self.movieFileOutput?.isRecording == true {
+                    self.finishRecord()
+                } else {
+                    self.startRecord(shouldScheduleStop: true)
+                }
             }
-        } else {
-            super.observeValue(forKeyPath: keyPath, of: object, change: change, context: context)
         }
     }
 }
