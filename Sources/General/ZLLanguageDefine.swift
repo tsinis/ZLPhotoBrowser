@@ -345,6 +345,9 @@ public struct ZLLocalLanguageKey: Hashable {
     
     /// Drag here to remove (拖到此处删除)
     public static let textStickerRemoveTips = ZLLocalLanguageKey(rawValue: "textStickerRemoveTips")
+
+    /// Please check the audio, it may not have recorded correctly
+    public static let recordAudioCheckTips = ZLLocalLanguageKey(rawValue: "recordAudioCheckTips")
 }
 
 func localLanguageTextValue(_ key: ZLLocalLanguageKey) -> String {

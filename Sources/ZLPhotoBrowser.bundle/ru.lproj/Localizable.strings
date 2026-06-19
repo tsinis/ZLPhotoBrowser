@@ -77,3 +77,5 @@
 
 "noTitleAlbumListPlaceholder" = "Все фотографии";
 "textStickerRemoveTips" = "Перетащите сюда, чтобы удалить";
+
+"recordAudioCheckTips" = "Пожалуйста, проверьте звук — возможно, он не записался корректно.";

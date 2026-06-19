@@ -1437,6 +1437,31 @@ open class ZLCustomCamera: UIViewController {
         player.automaticallyWaitsToMinimizeStalling = false
         recordVideoPlayerLayer?.player = player
         player.play()
+        checkAudioTrackAndWarnIfNeeded(in: fileURL)
+    }
+
+    private func checkAudioTrackAndWarnIfNeeded(in fileURL: URL) {
+        // Only meaningful when audio was expected.
+        guard cameraConfig.allowRecordVideo,
+              AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            return
+        }
+
+        let asset = AVURLAsset(url: fileURL)
+        asset.loadValuesAsynchronously(forKeys: ["tracks"]) { [weak self] in
+            var error: NSError?
+            // Only act when tracks are reliably loaded — otherwise stay silent (no false positive).
+            guard asset.statusOfValue(forKey: "tracks", error: &error) == .loaded else {
+                return
+            }
+            guard asset.tracks(withMediaType: .audio).isEmpty else {
+                return // audio present -> normal case, say nothing
+            }
+            ZLMainAsync {
+                guard let self = self else { return }
+                showAlertView(localLanguageTextValue(.recordAudioCheckTips), self)
+            }
+        }
     }
 
     @objc private func recordVideoPlayFinished() {

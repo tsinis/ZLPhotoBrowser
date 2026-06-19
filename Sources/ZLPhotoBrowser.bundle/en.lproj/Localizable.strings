@@ -77,3 +77,5 @@
 
 "noTitleAlbumListPlaceholder" = "All Photos";
 "textStickerRemoveTips" = "Drag here to remove";
+
+"recordAudioCheckTips" = "Please check the audio — it may not have recorded correctly.";
