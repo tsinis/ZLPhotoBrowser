@@ -101,7 +101,7 @@ public class ZLProgressHUD: UIView {
     
     public func show(
         toast: ZLProgressHUD.Toast = .loading,
-        in view: UIView? = UIApplication.shared.keyWindow,
+        in view: UIView? = deviceKeyWindow(),
         timeout: TimeInterval = 100
     ) {
         ZLMainAsync {
@@ -139,7 +139,7 @@ public class ZLProgressHUD: UIView {
 public extension ZLProgressHUD {
     class func show(
         toast: ZLProgressHUD.Toast = .loading,
-        in view: UIView? = UIApplication.shared.keyWindow,
+        in view: UIView? = deviceKeyWindow(),
         timeout: TimeInterval = 100
     ) -> ZLProgressHUD {
         let hud = ZLProgressHUD(style: ZLPhotoUIConfiguration.default().hudStyle)

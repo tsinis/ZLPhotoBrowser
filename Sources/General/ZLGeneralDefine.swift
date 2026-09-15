@@ -93,11 +93,19 @@ func deviceIsiPad() -> Bool {
     return UIDevice.current.userInterfaceIdiom == .pad
 }
 
+// `UIApplication.keyWindow` is nil under the UIScene life cycle, required as of iOS 27.
+public func deviceKeyWindow() -> UIWindow? {
+    guard #available(iOS 13, *) else { return UIApplication.shared.keyWindow }
+    let windows = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }.flatMap(\.windows)
+    return windows.first { $0.isKeyWindow } ?? windows.first
+}
+
 func deviceSafeAreaInsets() -> UIEdgeInsets {
     var insets: UIEdgeInsets = .zero
     
     if #available(iOS 11, *) {
-        insets = UIApplication.shared.keyWindow?.safeAreaInsets ?? .zero
+        insets = deviceKeyWindow()?.safeAreaInsets ?? .zero
     }
     
     return insets
@@ -139,7 +147,7 @@ func showAlertController(title: String?, message: String?, style: ZLCustomAlertS
         .map { $0.toSystemAlertAction() }
         .forEach { alert.addAction($0) }
     
-    let presentedVC = sender ?? UIApplication.shared.keyWindow?.rootViewController
+    let presentedVC = sender ?? deviceKeyWindow()?.rootViewController
     
     if deviceIsiPad() {
         alert.popoverPresentationController?.sourceView = presentedVC?.view
