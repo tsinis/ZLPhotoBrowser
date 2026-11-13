@@ -1389,13 +1389,15 @@ open class ZLCustomCamera: UIViewController {
         }
     }
 
-    private func resetSubViewStatus() {
+    /// - Parameter isSessionRunning: The state to show when the session is still changing to it.
+    private func resetSubViewStatus(isSessionRunning: Bool? = nil) {
         ZLMainAsync {
+            let isRunning = isSessionRunning ?? self.session.isRunning
             // Hardware capture buttons should only act on the live preview, not while
             // reviewing a captured photo/video (when the session is stopped).
-            self.setCaptureEventInteractionEnabled(self.session.isRunning)
+            self.setCaptureEventInteractionEnabled(isRunning)
 
-            if self.session.isRunning {
+            if isRunning {
                 self.showTipsLabel(message: self.cameraUsageTipsText())
                 self.bottomView.isHidden = false
                 self.dismissBtn.isHidden = false
@@ -1641,8 +1643,10 @@ extension ZLCustomCamera: AVCaptureFileOutputRecordingDelegate {
             self.stopRecordAnimation()
             self.cleanAutoStopTimer() // Cancel timer when recording finishes.
 
+            // `nil` while the session keeps running (no usable recording).
+            var isSessionRunning: Bool?
             defer {
-                self.resetSubViewStatus()
+                self.resetSubViewStatus(isSessionRunning: isSessionRunning)
             }
 
             guard !self.recordURLs.isEmpty else {
@@ -1661,7 +1665,13 @@ extension ZLCustomCamera: AVCaptureFileOutputRecordingDelegate {
                 return
             }
 
-            self.session.stopRunning()
+            // `stopRunning()` blocks until the capture pipeline is down (≥ 2 s on some iPhones), so it
+            // runs on the session queue, like every other start/stop here. The review controls show
+            // at once, while `session.isRunning` can still be `true` (INSPECTOR-APP-35P).
+            isSessionRunning = false
+            self.sessionQueue.async {
+                self.session.stopRunning()
+            }
 
             // 拼接视频
             if self.recordURLs.count > 1 {
